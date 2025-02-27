@@ -1,6 +1,8 @@
 package utils
 
 import (
+	"crypto/md5"
+	"encoding/hex"
 	"strings"
 
 	"golang.org/x/mod/semver"
@@ -38,4 +40,10 @@ func SemverIsStable(version string) bool {
 		return false
 	}
 	return true
+}
+
+func Md5sum(s string) string {
+	hash := md5.New()
+	hash.Write([]byte(s))
+	return hex.EncodeToString(hash.Sum(nil))
 }

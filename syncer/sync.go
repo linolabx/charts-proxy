@@ -1,15 +1,18 @@
 package syncer
 
 import (
+	"fmt"
 	"io"
 	"log"
 	"os"
 	"path"
+	"path/filepath"
 
 	"github.com/goccy/go-yaml"
 	"github.com/linolabx/charts-proxy/config"
 	"github.com/linolabx/charts-proxy/helm"
 	"github.com/linolabx/charts-proxy/utils"
+	"github.com/samber/lo"
 	resty "resty.dev/v3"
 )
 
@@ -95,15 +98,25 @@ func Sync(repo_config *config.Repo, config *config.Config) error {
 	}
 
 	for chart_name, charts := range remote_repo.EntriesMap {
-		for _, chart := range charts {
-			for _, file_url := range chart.Urls {
-				file_name := path.Base(file_url)
-				file_path := path.Join(base_dir, file_name)
+		chart_dir := path.Join(base_dir, chart_name)
+		if err := os.MkdirAll(chart_dir, 0755); err != nil {
+			return err
+		}
+
+		for chart_ver_index, chart_ver := range charts {
+			new_urls := make([]string, 0)
+
+			for _, file_url := range chart_ver.Urls {
+				file_ext := filepath.Ext(file_url)
+				file_path := path.Join(chart_dir, fmt.Sprintf("%s-%s-%s%s", chart_name, utils.SemverNormalize(chart_ver.Version), utils.Md5sum(file_url), file_ext))
+				releative_path := lo.Must(filepath.Rel(base_dir, file_path))
+				new_urls = append(new_urls, releative_path)
+
 				if _, err := os.Stat(file_path); err == nil {
 					continue
 				}
 
-				log.Printf("Downloading %s@%s", file_name, chart_name)
+				log.Printf("Downloading %s", releative_path)
 
 				file_resp, err := client.R().Get(file_url)
 				if err != nil {
@@ -120,6 +133,8 @@ func Sync(repo_config *config.Repo, config *config.Config) error {
 					return err
 				}
 			}
+
+			remote_repo.EntriesMap[chart_name][chart_ver_index].Urls = new_urls
 		}
 	}
 
